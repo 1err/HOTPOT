@@ -1,0 +1,44 @@
+services:
+  hotpot:
+    image: ${HOTPOT_IMAGE:-hotpot-lab:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Helpers match your host UID/GID so private bind-mounted files stay private.
+    user: "${HOTPOT_UID:-1000}:${HOTPOT_GID:-1000}"
+    init: true
+    restart: "no"
+    ports:
+      - "127.0.0.1:${HOTPOT_PORT:-8000}:8000"
+    environment:
+      HOTPOT_RECOGNITION_PROVIDER: openai
+      HOTPOT_OPENAI_MODEL: ${HOTPOT_OPENAI_MODEL:-gpt-5.4}
+      HOTPOT_OPENAI_REQUEST_LIMIT: ${HOTPOT_OPENAI_REQUEST_LIMIT:-100}
+      HOTPOT_DATA_DIR: /app/data
+      HOTPOT_MODEL_DIR: /tmp/hotpot-models
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+    secrets:
+      - openai_api_key
+    volumes:
+      - type: bind
+        source: ./data
+        target: /app/data
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+secrets:
+  openai_api_key:
+    file: ./.secrets/openai_api_key

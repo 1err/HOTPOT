@@ -1,0 +1,18 @@
+# Use an allowlist so credentials, camera photos and model weights cannot enter
+# the Docker build context, even when new private directories are added later.
+**
+!Dockerfile
+!requirements-vision.lock
+!run.py
+!hotpot/
+!hotpot/**
+!static/
+!static/**
+
+# Also exclude Python caches nested inside the allowed source directories.
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+.secrets/
+.env
+.env.*

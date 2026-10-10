@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Checks only: no registry publishing, repository writes, or paid vision calls.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-vision.lock
+      - name: Install cloud runtime and test dependencies
+        run: |
+          python -m pip install --require-hashes -r requirements-vision.lock
+          python -m pip install 'pytest>=8,<10'
+      - name: Test API, storage, recognition contracts, and dataset tools
+        run: python -m pytest -q
+      - name: Check browser JavaScript syntax
+        run: node --check static/app.js
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            architecture: amd64
+          - platform: linux/arm64
+            architecture: arm64
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build cloud-vision image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          tags: hotpot-ci:latest
+          cache-from: type=gha,scope=hotpot-${{ matrix.architecture }}
+          cache-to: type=gha,mode=max,scope=hotpot-${{ matrix.architecture }}
+      - name: Start with a local placeholder credential and persistent data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hotpot-ci/data"
+          chmod 700 "$RUNNER_TEMP/hotpot-ci" "$RUNNER_TEMP/hotpot-ci/data"
+          printf '%s\n' 'ci-placeholder-never-used' > "$RUNNER_TEMP/hotpot-ci/openai_api_key"
+          chmod 600 "$RUNNER_TEMP/hotpot-ci/openai_api_key"
+          docker run --detach --name hotpot-ci \
+            --platform '${{ matrix.platform }}' \
+            --user "$(id -u):$(id -g)" \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m,mode=1777 \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --mount "type=bind,src=$RUNNER_TEMP/hotpot-ci/openai_api_key,dst=/run/secrets/openai_api_key,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/hotpot-ci/data,dst=/app/data" \
+            --env HOTPOT_RECOGNITION_PROVIDER=openai \
+            --env HOTPOT_OPENAI_MODEL=gpt-5.4-mini \
+            --env HOTPOT_OPENAI_REQUEST_LIMIT=2 \
+            --env HOTPOT_DATA_DIR=/app/data \
+            --env HOTPOT_MODEL_DIR=/tmp/models \
+            --env OPENAI_API_KEY_FILE=/run/secrets/openai_api_key \
+            hotpot-ci:latest
+      - name: Verify HTTP startup, secret isolation, settings, and capture
+        shell: bash
+        run: |
+          docker exec -i hotpot-ci python - <<'PY'
+          import io
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+          from PIL import Image
+
+          base = "http://127.0.0.1:8000"
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen(base + "/api/health", timeout=2) as response:
+                      health = json.load(response)
+                  break
+              except (OSError, urllib.error.URLError):
+                  if attempt == 59:
+                      raise
+                  time.sleep(1)
+          assert health["ok"] is True
+          assert health["model"]["provider"] == "openai"
+          assert health["model"]["ready"] is True
+          assert health["model"]["usage"]["attempts"] == 0
+          assert "ci-placeholder-never-used" not in json.dumps(health)
+
+          with urllib.request.urlopen(base + "/", timeout=5) as response:
+              assert response.status == 200
+              assert "<html" in response.read().decode().lower()
+          with urllib.request.urlopen(base + "/api/config", timeout=5) as response:
+              config = json.load(response)
+          assert len(config["ingredients"]) == 9
+          request = urllib.request.Request(
+              base + "/api/config", method="PUT",
+              data=json.dumps({"durations": {"udon_noodles": 181}}).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(request, timeout=5) as response:
+              assert response.status == 200
+
+          picture = io.BytesIO()
+          Image.new("RGB", (32, 24), "white").save(picture, "PNG")
+          boundary = "hotpot-ci-boundary"
+          payload = (
+              f"--{boundary}\r\nContent-Disposition: form-data; name=\"label\"\r\n\r\nudon_noodles\r\n"
+              f"--{boundary}\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\nci-capture\r\n"
+              f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"frame.png\"\r\nContent-Type: image/png\r\n\r\n"
+          ).encode() + picture.getvalue() + f"\r\n--{boundary}--\r\n".encode()
+          request = urllib.request.Request(
+              base + "/api/samples", data=payload,
+              headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+          )
+          with urllib.request.urlopen(request, timeout=5) as response:
+              assert json.load(response)["total"] == 1
+          print("Container HTTP and capture checks passed without a vision API request.")
+          PY
+      - name: Restart the container and verify persisted data
+        shell: bash
+        run: |
+          docker restart hotpot-ci
+          docker exec -i hotpot-ci python - <<'PY'
+          import io
+          import json
+          import time
+          import urllib.error
+          import urllib.request
+          import zipfile
+
+          base = "http://127.0.0.1:8000"
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen(base + "/api/health", timeout=2) as response:
+                      health = json.load(response)
+                  break
+              except (OSError, urllib.error.URLError):
+                  if attempt == 59:
+                      raise
+                  time.sleep(1)
+          assert health["model"]["ready"] is True
+          assert health["model"]["usage"]["attempts"] == 0
+          with urllib.request.urlopen(base + "/api/config", timeout=5) as response:
+              config = json.load(response)
+          assert next(item for item in config["ingredients"] if item["id"] == "udon_noodles")["duration_seconds"] == 181
+          with urllib.request.urlopen(base + "/api/dataset", timeout=5) as response:
+              dataset = json.load(response)
+          assert dataset["total"] == 1
+          assert dataset["counts"]["udon_noodles"] == 1
+          with urllib.request.urlopen(base + "/api/dataset/export", timeout=5) as response:
+              exported = response.read()
+          with zipfile.ZipFile(io.BytesIO(exported)) as archive:
+              assert len([name for name in archive.namelist() if name.startswith("samples/")]) == 1
+              assert json.loads(archive.read("config.json"))["durations"]["udon_noodles"] == 181
+          print("Settings, sample capture, and export persist across a container restart.")
+          PY
+      - name: Container logs and cleanup
+        if: always()
+        shell: bash
+        run: |
+          if docker inspect hotpot-ci > /dev/null 2>&1; then
+            docker logs hotpot-ci
+            docker rm --force hotpot-ci > /dev/null
+          fi

@@ -1,0 +1,6 @@
+# Standalone cloud-vision setup: no local model weights or PyTorch needed.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+python-multipart>=0.0.20,<1
+pillow>=10,<13
+openai>=2,<3

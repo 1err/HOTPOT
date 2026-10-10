@@ -1,0 +1,72 @@
+{
+  "clamp_body": {
+    "triangles": 728,
+    "dimensions_mm": [
+      72.0,
+      114.0,
+      32.0
+    ],
+    "minimum_z_mm": 0.0,
+    "volume_cm3": 111.863,
+    "watertight_edges": true,
+    "consistent_edge_winding": true,
+    "connected_components": 1,
+    "degenerate_triangles": 0
+  },
+  "moving_pad": {
+    "triangles": 524,
+    "dimensions_mm": [
+      32.0,
+      26.0,
+      9.0
+    ],
+    "minimum_z_mm": 0.0,
+    "volume_cm3": 7.132,
+    "watertight_edges": true,
+    "consistent_edge_winding": true,
+    "connected_components": 1,
+    "degenerate_triangles": 0
+  },
+  "link": {
+    "triangles": 780,
+    "dimensions_mm": [
+      111.0,
+      26.0,
+      8.0
+    ],
+    "minimum_z_mm": 0.0,
+    "volume_cm3": 21.374,
+    "watertight_edges": true,
+    "consistent_edge_winding": true,
+    "connected_components": 1,
+    "degenerate_triangles": 0
+  },
+  "pivot": {
+    "triangles": 440,
+    "dimensions_mm": [
+      32.0,
+      32.0,
+      32.0
+    ],
+    "minimum_z_mm": 0.0,
+    "volume_cm3": 17.016,
+    "watertight_edges": true,
+    "consistent_edge_winding": true,
+    "connected_components": 1,
+    "degenerate_triangles": 0
+  },
+  "camera_head": {
+    "triangles": 1168,
+    "dimensions_mm": [
+      72.0,
+      52.0,
+      30.0
+    ],
+    "minimum_z_mm": 0.0,
+    "volume_cm3": 21.231,
+    "watertight_edges": true,
+    "consistent_edge_winding": true,
+    "connected_components": 1,
+    "degenerate_triangles": 0
+  }
+}

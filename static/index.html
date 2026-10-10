@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#191b19">
+  <title>Hotpot Lab — 看见食材，记住时间</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/" aria-label="Hotpot Lab home">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 21h26c0 9-5 13-13 13S7 30 7 21Z"/><path d="M4 21h32M13 6c-4 4 4 5 0 9M21 4c-4 4 4 5 0 9M29 6c-4 4 4 5 0 9"/></svg>
+      <span>hotpot<span class="brand-light">lab</span><small>看见食材，记住时间</small></span>
+    </a>
+    <div class="header-meta"><span class="local-tag"><i></i> <span id="prototype-tag">HOTPOT PROTOTYPE</span></span><a href="#dataset-section" class="text-link">Build your dataset <svg class="inline-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 12 8-8M4 4h8v8"/></svg></a></div>
+  </header>
+
+  <main>
+    <div class="page-intro"><div><p class="eyebrow">CAMERA &gt; INGREDIENT &gt; TIMER</p><h1>A little less watching.<br><span>A little more hotpot.</span></h1></div><p class="intro-note">Hold an ingredient in the frame.<br>Recognize it, then start its timer<br>when you add it to the pot.</p></div>
+
+    <div id="global-message" class="notice" role="status" hidden></div>
+
+    <div class="workspace">
+      <section class="camera-card" aria-labelledby="camera-heading">
+        <div class="card-top"><h2 id="camera-heading"><span class="section-index">01</span> The camera <span class="chinese-sub">识别食材</span></h2><span id="source-badge" class="pill">NO SOURCE</span></div>
+        <div class="viewfinder" id="viewfinder">
+          <video id="camera-video" autoplay playsinline muted hidden></video>
+          <img id="uploaded-image" alt="Uploaded ingredient for recognition" hidden>
+          <div class="camera-empty" id="camera-empty">
+            <div class="empty-camera-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M7 15h9l4-5h9l4 5h8v24H7Z"/><circle cx="24" cy="26" r="7"/></svg></div>
+            <h3>Your ingredient goes here.</h3>
+            <p>Connect a camera, or upload a photo.<br><span id="source-help">Choose a recognition model below.</span></p>
+            <button id="empty-start-camera" type="button" class="button primary">Enable camera <svg class="inline-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 12 8-8M4 4h8v8"/></svg></button>
+          </div>
+          <div class="crop-guide" id="crop-guide" hidden><i></i><i></i><i></i><i></i><span>ONE INGREDIENT · 一种食材</span></div>
+          <div class="frame-result" id="frame-result" hidden><div><span id="frame-result-state">WAITING TO RECOGNIZE</span><strong id="frame-result-name">Hold one ingredient in the guide.</strong></div><span id="frame-result-score"></span></div>
+          <div class="viewfinder-bottom"><span id="frame-label">WAITING FOR AN IMAGE</span><span id="inference-label">—</span></div>
+        </div>
+
+        <div class="camera-controls">
+          <div class="source-controls"><label for="camera-select" class="sr-only">Camera device</label><select id="camera-select"><option value="">Default camera</option></select><button id="start-camera" class="button secondary" type="button">Start camera</button><button id="stop-camera" class="button quiet" type="button" disabled>Stop</button></div>
+          <label class="upload-button" for="image-upload">Upload image <svg class="inline-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4M3 14h10"/></svg><input id="image-upload" type="file" accept="image/*" class="sr-only"></label>
+        </div>
+        <div class="recognizer-choice"><label for="recognition-model">Recognition model</label><select id="recognition-model" disabled><option value="openai:gpt-5.4">GPT-5.4 · accuracy test</option><option value="openai:gpt-5.4-mini">GPT-5.4 mini · lower cost</option><option value="local">Local model · offline</option></select></div>
+        <div class="recognition-controls"><label class="toggle"><input id="auto-recognize" type="checkbox"><span class="toggle-track" aria-hidden="true"></span><span id="live-recognition-label">Live recognition</span></label><button id="recognize-once" class="text-button" type="button" disabled><span id="recognize-button-label">Recognize frame</span> <svg class="inline-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 12 8-8M4 4h8v8"/></svg></button></div>
+        <p id="recognition-caption" class="recognition-caption">Recognition uses only the crop inside the guide.</p>
+
+        <div class="prediction-panel">
+          <div class="prediction-heading"><span class="eyebrow">MODEL OBSERVATION</span><span id="confidence-badge" class="confidence-badge">WAITING</span></div>
+          <div class="prediction-main"><div><h3 id="prediction-name">Let’s see what’s cooking.</h3><p id="prediction-detail">The crop inside your camera guide is sent to the local model.</p></div><div class="prediction-mark" aria-hidden="true"><svg class="inline-icon" viewBox="0 0 16 16"><path d="m4 12 8-8M4 4h8v8"/></svg></div></div>
+          <div id="score-bars" class="score-bars" aria-label="Ingredient match scores" hidden></div>
+          <div class="model-line"><span id="model-status-dot" class="status-dot"></span><span id="model-label">Checking recognition model…</span><button id="reload-model" type="button" class="text-button">Reload model</button></div>
+          <p id="model-message" class="model-message"></p>
+          <p id="model-usage" class="model-usage" hidden></p>
+        </div>
+      </section>
+
+      <aside class="timer-card" aria-labelledby="timer-heading">
+        <div class="card-top"><h2 id="timer-heading"><span class="section-index">02</span> Your pot <span class="chinese-sub">计时提醒</span></h2><span id="timer-count" class="pill">0 ACTIVE</span></div>
+        <div class="timer-body">
+          <p class="small-note">Choose an ingredient, or let the camera select it.</p>
+          <div id="ingredient-grid" class="ingredient-grid" aria-label="Select an ingredient"></div>
+          <div class="selected-summary"><div><span class="eyebrow">SELECTED INGREDIENT</span><h3 id="selected-name">Choose an ingredient</h3></div><div class="duration-field"><label for="duration-input">Timer · seconds</label><input id="duration-input" type="number" min="1" max="7200" step="1" inputmode="numeric" placeholder="Set time" disabled><span id="duration-save-status" class="save-status"></span></div></div>
+          <button id="start-timer" class="button primary start-timer" type="button" disabled><span>Added to pot · 开始计时</span><kbd>SPACE</kbd></button>
+          <p id="timer-help" class="timer-help">Set your preferred duration to start a timer.</p>
+
+          <div class="timers-heading"><h3>In the pot <span>锅里</span></h3><span id="active-summary">Nothing added yet</span></div>
+          <div id="timer-list" class="timer-list"><div class="timer-empty"><span aria-hidden="true">◷</span><p>A timer for every ingredient.<small>One active timer per ingredient.<br>Repeating a recognition won’t restart it.</small></p></div></div>
+        </div>
+        <div class="notification-settings"><label><input id="sound-notifications" type="checkbox"> Sound</label><label><input id="voice-notifications" type="checkbox"> Spoken reminders</label><button id="test-alert" type="button" class="text-button">Test</button></div>
+      </aside>
+    </div>
+
+    <section class="dataset-card" id="dataset-section" aria-labelledby="dataset-heading">
+      <div class="dataset-intro"><p class="eyebrow">MAKE IT BETTER WITH YOUR OWN IMAGES</p><h2 id="dataset-heading">Teach it your table.<span>收集真实食材</span></h2><p>Save the crop inside the guide with its correct label. Capture varied views, lighting, and backgrounds across recording sessions.</p><a id="export-dataset" href="/api/dataset/export" class="text-link">Export dataset ZIP <svg class="inline-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M4 9l4 4 4-4M3 14h10"/></svg></a></div>
+      <div class="dataset-tools"><div class="sample-fields"><label>Correct ingredient<select id="sample-label"><option value="">Choose a label</option></select></label><label>Recording session<input id="session-id" type="text" maxlength="80" placeholder="e.g. kitchen-day-1" autocomplete="off"></label></div><div class="capture-row"><button id="capture-sample" type="button" class="button secondary" disabled>Save labeled crop <span aria-hidden="true">+</span></button><span id="sample-message" role="status">Camera or image needed.</span></div><div id="dataset-counts" class="dataset-counts" aria-label="Saved samples by ingredient"></div><p class="dataset-footnote">Use a different session for evaluation. Recognition corrections are saved as training examples; they don’t silently retrain the model.</p></div>
+    </section>
+    <footer><span>HOTPOT LAB <span class="footer-divider">/</span> FIRST INGREDIENT PROTOTYPE</span><span><span id="ingredient-count">9</span> ingredients. Your times. A shared pot.</span></footer>
+  </main>
+  <canvas id="capture-canvas" hidden></canvas>
+</body>
+</html>
