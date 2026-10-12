@@ -55,6 +55,12 @@ Open **http://localhost:8000**, then refresh with **Cmd+Shift+R**. Start the cam
 
 For a fresh installation, first run `python3 -m venv .venv`, then the two commands above. GPT-only installation needs no Torch, CLIP weights, or ingredient fine-tuning. Each recognition sends the selected camera-guide crop to OpenAI; the server and timers run on your laptop. Requests use `store: false`, which disables Responses storage but does not override API data-retention policies.
 
+## GPT confidence display
+
+New GPT results include **High / Medium / Low** confidence bands and a short explanation. These are the model's own qualitative assessments, clearly labeled as an uncalibrated GPT estimate. They are not measured probabilities, and the app does not turn them into percentages. Low-confidence results remain uncertain and do not automatically select an ingredient. Older responses without a band keep their existing presentation; local-model match scores are unchanged.
+
+Use labeled evaluations to check whether high-confidence results are actually more reliable. Fine-tuning is not needed to display these bands, and three public photos per ingredient are too few to calibrate them reliably.
+
 ## GPT costs and controls
 
 The comparison offers **GPT-5.4** and **GPT-5.4 mini**. These are supported vision models; neither has passed our ingredient tests yet. Start with the larger model to establish a baseline, then compare mini using the same images before choosing it for cost. The browser captures the visible guide crop at up to 768 pixels. GPT gets that crop rather than CLIP's internal 224-pixel input. Its answer is constrained to the nine ingredient IDs or background, with uncertainty and a short reason. GPT results display no invented confidence percentages.
@@ -81,6 +87,44 @@ Use **Save labeled crop** and name the session, for example `first-camera-test`.
 Add `--run` to execute it. The script reads `OPENAI_API_KEY` or prompts privately for the key. Its report records class coverage, errors, accepted recognition accuracy, abstentions, latency, and estimated token cost. All models receive the same saved images, then apply their own normal preprocessing. Including `local` requires the local dependencies and prepared weights below. Missing classes are reported so a small test is not presented as nine-class accuracy.
 
 The integration is verified using mocked API responses. **GPT accuracy on your ingredients remains unmeasured until the comparison runs with real photos and your API account.**
+
+## Reproduce the 27-photo public-image test
+
+`training_data/public_benchmark.json` fixes three distinct public photograph candidates for each of the nine ingredients. It records each exact source page, image URL, attribution, and review status. These are evaluation inputs, separate from the training-image catalog. The current manifest still needs pixel-level review; no recognition results are implied by its labels.
+
+Preview the complete test without downloading images or calling GPT:
+
+```bash
+python scripts/benchmark_public_images.py
+```
+
+Download the inputs and open the generated `data/public-benchmark/gallery.html` to inspect the actual images:
+
+```bash
+python scripts/benchmark_public_images.py --download-only
+```
+
+Verify that each input shows its intended ingredient; an optional normalized `crop_box` records an ingredient-only crop. Mark suitable entries `review_status: "accepted"` before executing. Unsuitable candidates should be replaced with a distinct photograph of the same ingredient. All 27 must be reviewed before paid inference.
+
+```bash
+python scripts/benchmark_public_images.py --run --model gpt-5.4
+```
+
+The runner uses the same GPT recognizer as the app. It sends image pixels and the common ingredient prompt, without the source filenames, expected labels, or website captions. It records the exact input hashes, expected/predicted ingredient, uncertainty, explanation, model-assessed confidence when available, latency, reported token usage, and estimated cost. It writes JSON, Markdown, and an image gallery under `data/public-benchmark/`. Request errors are reported separately from incorrect predictions. Completed or interrupted attempts are preserved so rerunning the command does not silently repeat paid requests; `--rerun` explicitly archives and repeats the test.
+
+For Docker, run the same script using the app's dependencies and mounted key:
+
+```bash
+export HOTPOT_UID="$(id -u)" HOTPOT_GID="$(id -g)"
+docker compose run --rm --no-deps \
+  --volume "$PWD/scripts:/app/scripts:ro" \
+  --volume "$PWD/training_data:/app/training_data:ro" \
+  hotpot python scripts/benchmark_public_images.py --download-only
+```
+
+After reviewing, replace `--download-only` with `--run --model gpt-5.4`. The normal app image remains small; these source folders are mounted only for this command. The API key stays in its existing secret file. Sources are downloaded locally and never automatically imported into training or committed to Git. One product photograph has no stated open license; its source link is recorded without redistributing its pixels.
+
+Three photos per ingredient can expose obvious confusions but cannot establish reliable per-class accuracy or calibrate confidence. Public photos may also have appeared in pretraining. Follow this with a separate test of your actual webcam images before deciding whether prompting, capture changes, or local model training is needed.
 
 ## Start the local recognition model
 

@@ -19,7 +19,7 @@
     "crop-guide", "source-badge", "frame-label", "inference-label", "empty-start-camera",
     "frame-result", "frame-result-name", "frame-result-state", "frame-result-score",
     "camera-select", "start-camera", "stop-camera", "image-upload", "auto-recognize",
-    "recognize-once", "prediction-name", "prediction-detail", "confidence-badge",
+    "recognize-once", "prediction-name", "prediction-detail", "confidence-badge", "confidence-note",
     "score-bars", "model-status-dot", "model-label", "model-message", "reload-model",
     "ingredient-grid", "selected-name", "duration-input", "duration-save-status",
     "start-timer", "timer-help", "timer-count", "active-summary", "timer-list",
@@ -458,6 +458,7 @@
     ui.frameResultName.textContent = "Hold one ingredient in the guide.";
     ui.frameResultState.textContent = "WAITING TO RECOGNIZE";
     ui.frameResultScore.textContent = "";
+    ui.confidenceNote.hidden = true;
     ui.frameResult.classList.remove("confident", "uncertain");
     clearTimeout(state.recognitionTimeout);
     state.recognitionTimeout = null;
@@ -673,6 +674,10 @@
     } catch (error) {
       if (generation !== state.generation) return;
       ui.inferenceLabel.textContent = "RECOGNITION ERROR";
+      ui.confidenceNote.hidden = true;
+      ui.confidenceBadge.textContent = "RECOGNITION ERROR";
+      ui.confidenceBadge.className = "confidence-badge uncertain";
+      ui.confidenceBadge.title = "";
       if (error.name !== "AbortError") {
         ui.predictionDetail.textContent = error.message;
         ui.frameResultName.textContent = "Recognition unavailable.";
@@ -720,11 +725,13 @@
     const topRaw = [...rawScores].sort((a, b) => b.score - a.score)[0];
     const isBackground = !returnedItem && topRaw?.id === "background";
     const item = returnedItem || ingredient(topRaw?.id);
-    const uncertain = prediction.uncertain === true || !returnedItem;
+    const confidenceLevel = cloudRecognition() && ["high", "medium", "low"].includes(prediction.confidence_level)
+      ? prediction.confidence_level : null;
+    const uncertain = prediction.uncertain === true || !returnedItem || confidenceLevel === "low";
     const confidence = cloudRecognition() ? null : Number.isFinite(prediction.confidence) ? prediction.confidence : rawScores[0]?.score;
     const unknown = cloudRecognition() && !returnedItem;
     const ambiguous = prediction.decision === "ambiguous" || prediction.status === "ambiguous"
-      || (cloudRecognition() && Boolean(returnedItem) && prediction.uncertain === true);
+      || (cloudRecognition() && Boolean(returnedItem) && uncertain);
     ui.predictionName.textContent = item ? uncertain ? `Maybe ${item.name}?` : item.name : isBackground ? "No ingredient recognized." : "Not sure what this is.";
     ui.predictionDetail.textContent = item
       ? `${item.en} · ${uncertain ? "Choose the correct ingredient below, or try another angle." : "Press “Added to pot” when you put it in."}`
@@ -733,11 +740,16 @@
     if (typeof prediction.reason === "string" && prediction.reason.trim()) {
       ui.predictionDetail.textContent = `${prediction.reason.trim()} ${uncertain ? "Choose manually or try another angle." : "Press “Added to pot” when you put it in."}`;
     }
-    ui.confidenceBadge.textContent = ambiguous ? "AMBIGUOUS" : unknown ? "UNKNOWN" : uncertain ? "UNCERTAIN" : Number.isFinite(confidence) ? `${confidence.toFixed(3)} MATCH SCORE` : "RECOGNIZED";
+    ui.confidenceBadge.textContent = confidenceLevel ? `${confidenceLevel.toUpperCase()} · GPT ESTIMATE`
+      : ambiguous ? "AMBIGUOUS" : unknown ? "UNKNOWN" : uncertain ? "UNCERTAIN" : Number.isFinite(confidence) ? `${confidence.toFixed(3)} MATCH SCORE` : "RECOGNIZED";
     ui.confidenceBadge.className = `confidence-badge ${uncertain ? "uncertain" : "confident"}`;
+    ui.confidenceBadge.title = confidenceLevel ? "GPT's own uncalibrated assessment, not a validated probability." : "";
+    ui.confidenceNote.hidden = !confidenceLevel;
     ui.frameResultName.textContent = ui.predictionName.textContent;
     ui.frameResultState.textContent = ambiguous ? "AMBIGUOUS · 请确认食材" : unknown ? "UNKNOWN · 无法识别" : uncertain ? "UNCERTAIN · 请确认食材" : "RECOGNIZED · 已识别";
-    ui.frameResultScore.textContent = !uncertain && Number.isFinite(confidence) ? `${confidence.toFixed(3)} match score` : "";
+    ui.frameResultScore.textContent = confidenceLevel ? `${confidenceLevel.toUpperCase()} GPT estimate`
+      : !uncertain && Number.isFinite(confidence) ? `${confidence.toFixed(3)} match score` : "";
+    ui.frameResultScore.title = confidenceLevel ? ui.confidenceBadge.title : "";
     ui.frameResult.classList.toggle("confident", !uncertain);
     ui.frameResult.classList.toggle("uncertain", uncertain);
     ui.scoreBars.replaceChildren();
@@ -769,6 +781,8 @@
       state.recognitionTimeout = null;
       ui.confidenceBadge.textContent = "WAITING";
       ui.confidenceBadge.className = "confidence-badge";
+      ui.confidenceBadge.title = "";
+      ui.confidenceNote.hidden = true;
       ui.predictionName.textContent = "Ready to recognize an ingredient.";
       ui.predictionDetail.textContent = cloud ? "Click “Recognize frame” to send this guide crop to OpenAI." : "The crop inside your camera guide is sent to the local model.";
       ui.scoreBars.hidden = true;
@@ -789,6 +803,8 @@
     if (model.state !== "ready") {
       ui.confidenceBadge.textContent = model.state === "loading" ? "MODEL LOADING" : "MANUAL MODE AVAILABLE";
       ui.confidenceBadge.className = "confidence-badge";
+      ui.confidenceBadge.title = "";
+      ui.confidenceNote.hidden = true;
       ui.predictionName.textContent = model.state === "loading" ? "Getting the model ready." : "Recognition needs a model.";
       ui.predictionDetail.textContent = "Choose any ingredient on the right to use timers now.";
       ui.scoreBars.hidden = true;
